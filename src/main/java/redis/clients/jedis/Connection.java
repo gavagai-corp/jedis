@@ -28,6 +28,7 @@ public class Connection implements Closeable {
   private RedisOutputStream outputStream;
   private RedisInputStream inputStream;
   private boolean broken = false;
+  private CommandListener commandListener;
 
   public Connection() {
     this(Protocol.DEFAULT_HOST);
@@ -97,6 +98,14 @@ public class Connection implements Closeable {
     }
   }
 
+  public void setCommandListener(CommandListener listener) {
+    this.commandListener = listener;
+  }
+
+  public void clearCommandListener() {
+    this.commandListener = null;
+  }
+
   public void sendCommand(final ProtocolCommand cmd, final String... args) {
     final byte[][] bargs = new byte[args.length][];
     for (int i = 0; i < args.length; i++) {
@@ -113,6 +122,10 @@ public class Connection implements Closeable {
     try {
       connect();
       Protocol.sendCommand(outputStream, cmd, args);
+      // Record commands sent, for retrying in cluster pipeline.
+      if (commandListener != null) {
+        commandListener.afterCommand(this, cmd, args);
+      }
     } catch (JedisConnectionException ex) {
       /*
        * When client send request which formed by invalid protocol, Redis send back error message
